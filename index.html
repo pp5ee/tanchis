@@ -234,14 +234,25 @@
 
     <script>
         class SnakeGame {
+            // Class constants for configuration
+            static CELL_SIZE = 30;
+            static GRID_SIZE = 20;
+            static BASE_CANVAS_SIZE = 600;
+            static TICK_INTERVAL = 100;
+            static SNAKE_COLOR = '#00d4aa';
+            static FOOD_COLOR = '#ff4757';
+            static GRID_COLOR = '#1a1a3a';
+            static BG_COLOR = '#0f0f1a';
+
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
                 this.scoreElement = document.getElementById('score');
 
-                // Grid configuration
-                this.cellSize = 30;
-                this.gridSize = 20;
+                // Grid configuration (from constants)
+                this.cellSize = SnakeGame.CELL_SIZE;
+                this.gridSize = SnakeGame.GRID_SIZE;
+                this.baseCanvasSize = SnakeGame.BASE_CANVAS_SIZE;
 
                 // Game state
                 this.snake = [];
@@ -252,12 +263,7 @@
                 this.gameRunning = false;
                 this.gameLoopId = null;
                 this.lastTick = 0;
-                this.tickInterval = 100; // 100ms = 10 moves/second
-
-                // Colors
-                this.snakeColor = '#00d4aa';
-                this.foodColor = '#ff4757';
-                this.gridColor = '#1a1a3a';
+                this.tickInterval = SnakeGame.TICK_INTERVAL;
 
                 // Visual effects
                 this.foodPulsePhase = 0;
@@ -266,8 +272,6 @@
                 // High score
                 this.highScore = parseInt(localStorage.getItem('snakeHighScore')) || 0;
 
-                // Canvas scaling
-                this.baseCanvasSize = 600;
                 this.scaleCanvas();
 
                 // Overlays
@@ -599,62 +603,72 @@
             }
 
             draw() {
-                // Clear canvas
-                this.ctx.fillStyle = '#0f0f1a';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.drawBackground();
+                this.drawGrid();
+                this.updateAndDrawFood();
+                this.drawParticles();
+                this.drawSnake();
+            }
 
-                // Draw subtle grid
+            drawBackground() {
+                // Use baseCanvasSize, not canvas.width/height (which are DPR-scaled)
+                this.ctx.fillStyle = SnakeGame.BG_COLOR;
+                this.ctx.fillRect(0, 0, this.baseCanvasSize, this.baseCanvasSize);
+            }
+
+            drawGrid() {
                 this.ctx.strokeStyle = 'rgba(26, 26, 58, 0.5)';
                 this.ctx.lineWidth = 1;
                 for (let i = 0; i <= this.gridSize; i++) {
                     const pos = i * this.cellSize;
                     this.ctx.beginPath();
                     this.ctx.moveTo(pos, 0);
-                    this.ctx.lineTo(pos, this.canvas.height);
+                    this.ctx.lineTo(pos, this.baseCanvasSize);
                     this.ctx.stroke();
                     this.ctx.beginPath();
                     this.ctx.moveTo(0, pos);
-                    this.ctx.lineTo(this.canvas.width, pos);
+                    this.ctx.lineTo(this.baseCanvasSize, pos);
                     this.ctx.stroke();
                 }
+            }
 
-                // Update food pulse
+            updateAndDrawFood() {
                 this.foodPulsePhase += 0.1;
 
-                // Draw food with glow and pulse
-                if (this.food) {
-                    const centerX = this.food.x * this.cellSize + this.cellSize / 2;
-                    const centerY = this.food.y * this.cellSize + this.cellSize / 2;
-                    const pulseRadius = Math.sin(this.foodPulsePhase) * 3;
+                if (!this.food) return;
 
-                    // Outer glow
-                    const gradient = this.ctx.createRadialGradient(
-                        centerX, centerY, 0,
-                        centerX, centerY, this.cellSize / 2 + 8 + pulseRadius
-                    );
-                    gradient.addColorStop(0, 'rgba(255, 71, 87, 0.8)');
-                    gradient.addColorStop(0.5, 'rgba(255, 71, 87, 0.3)');
-                    gradient.addColorStop(1, 'rgba(255, 71, 87, 0)');
+                const centerX = this.food.x * this.cellSize + this.cellSize / 2;
+                const centerY = this.food.y * this.cellSize + this.cellSize / 2;
+                const pulseRadius = Math.sin(this.foodPulsePhase) * 3;
 
-                    this.ctx.fillStyle = gradient;
-                    this.ctx.beginPath();
-                    this.ctx.arc(centerX, centerY, this.cellSize / 2 + 10 + pulseRadius, 0, Math.PI * 2);
-                    this.ctx.fill();
+                // Outer glow
+                const gradient = this.ctx.createRadialGradient(
+                    centerX, centerY, 0,
+                    centerX, centerY, this.cellSize / 2 + 8 + pulseRadius
+                );
+                gradient.addColorStop(0, 'rgba(255, 71, 87, 0.8)');
+                gradient.addColorStop(0.5, 'rgba(255, 71, 87, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 71, 87, 0)');
 
-                    // Core orb
-                    this.ctx.fillStyle = '#ff4757';
-                    this.ctx.beginPath();
-                    this.ctx.arc(centerX, centerY, this.cellSize / 2 - 4, 0, Math.PI * 2);
-                    this.ctx.fill();
+                this.ctx.fillStyle = gradient;
+                this.ctx.beginPath();
+                this.ctx.arc(centerX, centerY, this.cellSize / 2 + 10 + pulseRadius, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                    // Highlight
-                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-                    this.ctx.beginPath();
-                    this.ctx.arc(centerX - 4, centerY - 4, 4, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
+                // Core orb
+                this.ctx.fillStyle = SnakeGame.FOOD_COLOR;
+                this.ctx.beginPath();
+                this.ctx.arc(centerX, centerY, this.cellSize / 2 - 4, 0, Math.PI * 2);
+                this.ctx.fill();
 
-                // Draw particles
+                // Highlight
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                this.ctx.beginPath();
+                this.ctx.arc(centerX - 4, centerY - 4, 4, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            drawParticles() {
                 this.particles = this.particles.filter(p => p.life > 0);
                 this.particles.forEach(p => {
                     p.x += p.vx;
@@ -669,8 +683,9 @@
                     this.ctx.fill();
                     this.ctx.globalAlpha = 1;
                 });
+            }
 
-                // Draw snake with rounded segments
+            drawSnake() {
                 this.snake.forEach((segment, index) => {
                     const x = segment.x * this.cellSize + 2;
                     const y = segment.y * this.cellSize + 2;
@@ -688,51 +703,56 @@
                     }
 
                     this.ctx.fillStyle = gradient;
-                    this.roundRect(x, y, size, size, index === 0 ? 6 : 4);
+                    SnakeGame.roundRect(this.ctx, x, y, size, size, index === 0 ? 6 : 4);
                     this.ctx.fill();
 
-                    // Eyes on head
+                    // Draw eyes on head
                     if (index === 0) {
-                        this.ctx.fillStyle = '#0f0f1a';
-                        const eyeSize = 3;
-                        const eyeOffset = 6;
-                        if (this.direction.x === 1) {
-                            this.ctx.beginPath();
-                            this.ctx.arc(x + size - eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.arc(x + size - eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.fill();
-                        } else if (this.direction.x === -1) {
-                            this.ctx.beginPath();
-                            this.ctx.arc(x + eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.arc(x + eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.fill();
-                        } else if (this.direction.y === -1) {
-                            this.ctx.beginPath();
-                            this.ctx.arc(x + eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.arc(x + size - eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.fill();
-                        } else {
-                            this.ctx.beginPath();
-                            this.ctx.arc(x + eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.arc(x + size - eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
-                            this.ctx.fill();
-                        }
+                        this.drawSnakeEyes(x, y, size);
                     }
                 });
             }
 
-            roundRect(x, y, width, height, radius) {
-                this.ctx.beginPath();
-                this.ctx.moveTo(x + radius, y);
-                this.ctx.lineTo(x + width - radius, y);
-                this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-                this.ctx.lineTo(x + width, y + height - radius);
-                this.ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-                this.ctx.lineTo(x + radius, y + height);
-                this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-                this.ctx.lineTo(x, y + radius);
-                this.ctx.quadraticCurveTo(x, y, x + radius, y);
-                this.ctx.closePath();
+            drawSnakeEyes(x, y, size) {
+                this.ctx.fillStyle = SnakeGame.BG_COLOR;
+                const eyeSize = 3;
+                const eyeOffset = 6;
+
+                if (this.direction.x === 1) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(x + size - eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.arc(x + size - eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else if (this.direction.x === -1) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(x + eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.arc(x + eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else if (this.direction.y === -1) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(x + eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.arc(x + size - eyeOffset, y + eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else {
+                    this.ctx.beginPath();
+                    this.ctx.arc(x + eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.arc(x + size - eyeOffset, y + size - eyeOffset, eyeSize, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+            }
+
+            static roundRect(ctx, x, y, width, height, radius) {
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + width - radius, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                ctx.lineTo(x + width, y + height - radius);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                ctx.lineTo(x + radius, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
             }
 
             gameLoop(timestamp) {
