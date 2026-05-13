@@ -34,6 +34,81 @@
             box-shadow: 0 0 40px rgba(0, 212, 170, 0.1);
             display: block;
             will-change: transform;
+            max-width: 100%;
+            max-height: calc(100vh - 200px);
+            width: auto;
+            height: auto;
+        }
+
+        .mobile-controls {
+            display: none;
+            margin-top: 16px;
+            gap: 8px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .mobile-controls-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .mobile-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 212, 170, 0.1);
+            border: 2px solid rgba(0, 212, 170, 0.3);
+            border-radius: 12px;
+            color: #00ffc8;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        .mobile-btn:active {
+            background: rgba(0, 212, 170, 0.3);
+            transform: scale(0.95);
+        }
+
+        @media (max-width: 640px) {
+            .game-container {
+                padding: 10px;
+                width: 100%;
+            }
+
+            .score-container {
+                gap: 16px;
+            }
+
+            .score-display, .high-score-display {
+                font-size: 20px;
+            }
+
+            .controls-hint {
+                display: none;
+            }
+
+            .mobile-controls {
+                display: flex;
+            }
+
+            .overlay-title {
+                font-size: 36px;
+            }
+
+            .overlay-score {
+                font-size: 18px;
+            }
+
+            .overlay-hint {
+                font-size: 14px;
+            }
         }
 
         .game-overlay {
@@ -145,6 +220,16 @@
             <div class="overlay-hint">Press P to Resume</div>
         </div>
         <div class="controls-hint">Use Arrow Keys or WASD to move · P to Pause</div>
+        <div class="mobile-controls" id="mobileControls">
+            <div class="mobile-controls-row">
+                <button class="mobile-btn" data-direction="up">↑</button>
+            </div>
+            <div class="mobile-controls-row">
+                <button class="mobile-btn" data-direction="left">←</button>
+                <button class="mobile-btn" data-direction="down">↓</button>
+                <button class="mobile-btn" data-direction="right">→</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -181,6 +266,10 @@
                 // High score
                 this.highScore = parseInt(localStorage.getItem('snakeHighScore')) || 0;
 
+                // Canvas scaling
+                this.baseCanvasSize = 600;
+                this.scaleCanvas();
+
                 // Overlays
                 this.startOverlay = document.getElementById('startOverlay');
                 this.gameOverOverlay = document.getElementById('gameOverOverlay');
@@ -195,6 +284,7 @@
 
             init() {
                 this.setupEventListeners();
+                this.setupResizeHandler();
                 this.reset();
                 this.showStartScreen();
             }
@@ -242,7 +332,41 @@
                 this.spawnFood();
             }
 
+            setupResizeHandler() {
+                let resizeTimeout;
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(() => {
+                        this.scaleCanvas();
+                        this.draw();
+                    }, 100);
+                });
+            }
+
+            scaleCanvas() {
+                const container = this.canvas.parentElement;
+                const maxWidth = Math.min(window.innerWidth - 20, 600);
+                const maxHeight = window.innerHeight - 200;
+                const size = Math.min(maxWidth, maxHeight, 600);
+
+                // Set display size (CSS pixels)
+                this.canvas.style.width = size + 'px';
+                this.canvas.style.height = size + 'px';
+
+                // Set actual canvas size (handle high-DPI)
+                const dpr = window.devicePixelRatio || 1;
+                this.canvas.width = this.baseCanvasSize * dpr;
+                this.canvas.height = this.baseCanvasSize * dpr;
+
+                // Scale context for high-DPI
+                this.ctx.scale(dpr, dpr);
+
+                // Store display scale factor for coordinate calculations
+                this.displayScale = size / this.baseCanvasSize;
+            }
             setupEventListeners() {
+            setupEventListeners() {
+                // Keyboard controls
                 document.addEventListener('keydown', (e) => {
                     if (e.key === ' ' || e.key === 'Spacebar') {
                         e.preventDefault();
@@ -264,6 +388,88 @@
                         this.start();
                     }
                 });
+
+                // Touch / swipe controls
+                let touchStartX = 0;
+                let touchStartY = 0;
+                let touchStartTime = 0;
+
+                this.canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    touchStartX = touch.clientX;
+                    touchStartY = touch.clientY;
+                    touchStartTime = Date.now();
+                }, { passive: false });
+
+                this.canvas.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    const touch = e.changedTouches[0];
+                    const dx = touch.clientX - touchStartX;
+                    const dy = touch.clientY - touchStartY;
+                    const dt = Date.now() - touchStartTime;
+
+                    // Minimum swipe distance and maximum time
+                    const minSwipeDistance = 30;
+                    const maxSwipeTime = 500;
+
+                    if (dt < maxSwipeTime && (Math.abs(dx) > minSwipeDistance || Math.abs(dy) > minSwipeDistance)) {
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            // Horizontal swipe
+                            this.handleInput(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
+                        } else {
+                            // Vertical swipe
+                            this.handleInput(dy > 0 ? 'ArrowDown' : 'ArrowUp');
+                        }
+                    } else if (dt < 200 && Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+                        // Tap to start/restart
+                        if (!this.gameRunning && this.pauseOverlay.classList.contains('hidden')) {
+                            this.reset();
+                            this.start();
+                        }
+                    }
+                }, { passive: false });
+
+                // Prevent scrolling on touch
+                this.canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                }, { passive: false });
+
+                // Mobile button controls
+                const mobileButtons = document.querySelectorAll('.mobile-btn');
+                mobileButtons.forEach(btn => {
+                    const direction = btn.dataset.direction;
+                    const keyMap = {
+                        'up': 'ArrowUp',
+                        'down': 'ArrowDown',
+                        'left': 'ArrowLeft',
+                        'right': 'ArrowRight'
+                    };
+
+                    const handleBtnPress = (e) => {
+                        e.preventDefault();
+                        this.handleInput(keyMap[direction]);
+                    };
+
+                    btn.addEventListener('touchstart', handleBtnPress, { passive: false });
+                    btn.addEventListener('mousedown', handleBtnPress);
+                });
+
+                // Prevent double-tap zoom on mobile
+                document.addEventListener('touchstart', (e) => {
+                    if (e.touches.length > 1) {
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+
+                let lastTouchEnd = 0;
+                document.addEventListener('touchend', (e) => {
+                    const now = Date.now();
+                    if (now - lastTouchEnd <= 300) {
+                        e.preventDefault();
+                    }
+                    lastTouchEnd = now;
+                }, { passive: false });
             }
 
             handleInput(key) {
